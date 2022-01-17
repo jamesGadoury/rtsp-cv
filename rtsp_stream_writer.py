@@ -8,7 +8,8 @@ def test_can_write_stream():
 
     assert writer.capture.isOpened()
 
-    while time() - start < 10:
+    # waiting for roughly 5 seconds to pass, doesn't have to be super accurate
+    while time() - start < 5:
         writer.read_frame_and_write()
 
 

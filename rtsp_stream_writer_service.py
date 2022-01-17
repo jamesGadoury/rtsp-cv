@@ -14,7 +14,6 @@ class RTSPStreamWriterService(Service):
         self.writer = None
 
 
-
     def init_writer(self, rtsp_link, file_path):
         self.logger.info(f'RTSPStreamWriterService.init_writer called with rtsp_link={rtsp_link}, file_path={file_path}')
         self.writer = RTSPStreamWriter(rtsp_link=rtsp_link, file_path=file_path)
