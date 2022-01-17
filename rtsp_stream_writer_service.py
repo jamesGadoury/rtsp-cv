@@ -10,7 +10,7 @@ class RTSPStreamWriterService(Service):
         super(RTSPStreamWriterService, self).__init__(*args, **kwargs)
         self.logger.addHandler(SysLogHandler(address=find_syslog(),
                                facility=SysLogHandler.LOG_DAEMON))
-        self.logger.setLevel(logging.INFO)
+        self.logger.setLevel(logging.DEBUG)
         self.rtsp_link = None
         self.file_path = None
 
@@ -22,7 +22,7 @@ class RTSPStreamWriterService(Service):
 
 
     def process_rtsp_stream(self):
-        self.logger.info(f'RTSPStreamWriterService.process_rtsp_stream called with self={self}')
+        self.logger.info(f'RTSPStreamWriterService.process_rtsp_stream called with self.rtsp_link={self.rtsp_link}, self.file_path={self.file_path}')
         print('here we are')
         # Create a VideoCapture object
         capture = cv2.VideoCapture(self.rtsp_link)
@@ -35,12 +35,14 @@ class RTSPStreamWriterService(Service):
         frame_height = int(capture.get(4))
 
         out = cv2.VideoWriter(self.file_path, cv2.VideoWriter_fourcc('M','J','P','G'), 10, (frame_width,frame_height))
+
         # Read until video is completed
         while(capture.isOpened() and not self.got_sigterm()):
             # Capture frame-by-frame
             ret, frame = capture.read()
 
             if ret:
+                self.logger.debug(f'RTSPStreamWriterService.process_rtsp_stream: received frame')
                 out.write(frame)
             else:
                 break
