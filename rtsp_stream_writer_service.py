@@ -1,9 +1,9 @@
 import logging
 from logging.handlers import SysLogHandler
-import time
-import cv2
 
 from service import find_syslog, Service
+
+from rtsp_stream_writer import RTSPStreamWriter
 
 class RTSPStreamWriterService(Service):
     def __init__(self, *args, **kwargs):
@@ -11,44 +11,28 @@ class RTSPStreamWriterService(Service):
         self.logger.addHandler(SysLogHandler(address=find_syslog(),
                                facility=SysLogHandler.LOG_DAEMON))
         self.logger.setLevel(logging.DEBUG)
-        self.rtsp_link = None
-        self.file_path = None
+        self.writer = None
 
 
-    def set_parameters(self, rtsp_link, file_path):
-        self.logger.info(f'RTSPStreamWriterService.set_parameters called with rtsp_link={rtsp_link}, file_path={file_path}')
-        self.rtsp_link = rtsp_link
-        self.file_path = file_path
+
+    def init_writer(self, rtsp_link, file_path):
+        self.logger.info(f'RTSPStreamWriterService.init_writer called with rtsp_link={rtsp_link}, file_path={file_path}')
+        self.writer = RTSPStreamWriter(rtsp_link=rtsp_link, file_path=file_path)
+        if not self.writer.capture.isOpened():
+            raise ValueError(f'init_writer called with {rtsp_link} that could not create capture')
 
 
     def process_rtsp_stream(self):
-        self.logger.info(f'RTSPStreamWriterService.process_rtsp_stream called with self.rtsp_link={self.rtsp_link}, self.file_path={self.file_path}')
+        self.logger.info(f'RTSPStreamWriterService.process_rtsp_stream called with self.writer={self.writer}')
         print('here we are')
-        # Create a VideoCapture object
-        capture = cv2.VideoCapture(self.rtsp_link)
-
-        if (not capture.isOpened()):
-            self.logger.error(f'RTSPStreamWriterService.process_rtsp_stream error: unable to open capture for rtsp_link={self.rtsp_link}')
-            return
-
-        frame_width = int(capture.get(3))
-        frame_height = int(capture.get(4))
-
-        out = cv2.VideoWriter(self.file_path, cv2.VideoWriter_fourcc('M','J','P','G'), 10, (frame_width,frame_height))
 
         # Read until video is completed
-        while(capture.isOpened() and not self.got_sigterm()):
-            # Capture frame-by-frame
-            ret, frame = capture.read()
+        while not self.got_sigterm():
+            self.writer.read_frame_and_write()
+            self.logger.debug(f'read_frame_and_write called')
 
-            if ret:
-                self.logger.debug(f'RTSPStreamWriterService.process_rtsp_stream: received frame')
-                out.write(frame)
-            else:
-                break
-        
-        # When everything done, release the video capture object
-        capture.release()
+        self.logger.debug(f'got_sigterm')
+
 
 
     def run(self):

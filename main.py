@@ -24,12 +24,12 @@ if __name__ =='__main__':
 
     if args.command == 'start':
         print('Starting service.')
-        service.set_parameters(rtsp_link=args.rtsp_link, file_path=args.file_path)
+        service.init_writer(rtsp_link=args.rtsp_link, file_path=args.file_path)
         service.start()
     
     if args.command == 'stop':
         print('Stopping service.')
-        service.stop(block=True)
+        service.stop()
 
     if args.command == 'status':
         print('Service is running.') if service.is_running() else print('Service is not running.')
