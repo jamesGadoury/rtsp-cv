@@ -1,36 +1,65 @@
-import cv2
-from argparse import ArgumentParser
+from redis import StrictRedis
+from multiprocessing import Process, Value
+from rtsp_stream_writer import RTSPStreamWriter
+import json
 
-def main(capture, file_path):
+def listen_to_stop_event(redis_protocol: StrictRedis, stop_flag: Value):
+    print('listen_to_stop_event called')
+    sub = redis_protocol.pubsub()
+    sub.subscribe('stop_rtsp_stream_writer')
+
+    for message in sub.listen():
+        if message['type'] == 'message':
+            stop_flag.value = 1
+            print('stop event triggered')
+            break
+
+    
+def start_rtsp_stream_writer(redis_protocol: StrictRedis, message: dict):
+    print(f'start_rtsp_stream_writer called with message={message}')
+    assert 'rtsp_link' in message
+    assert 'file_path' in message
+
+    print(f'in start_rtsp_stream_writer, message={message}')
+    writer = RTSPStreamWriter(rtsp_link=message.get('rtsp_link'), file_path=message.get('file_path'))
+
+    if not writer.capture.isOpened():
+        print(f'error! failure to start stream writing!')
+        return
+
+    # next we create a new process for listening to the stop event
+    stop_flag = Value('i', 0)
+    listen_process = Process(target=listen_to_stop_event, args=(redis_protocol, stop_flag))
+    listen_process.start()
+
+    while stop_flag.value == 0:
+        if not writer.capture.isOpened():
+            print('writer capture failed to stay open')
+            listen_process.terminate()
+            break
+        writer.read_frame_and_write()
+    listen_process.join()
+    print('finished in start_rtsp_stream_writer')
+
+
+def main():
     print('main was called!')
 
-    frame_width = int(capture.get(3))
-    frame_height = int(capture.get(4))
+    red = StrictRedis('localhost', 6379, charset="utf-8", decode_responses=True)
 
-    out = cv2.VideoWriter(file_path, cv2.VideoWriter_fourcc('M','J','P','G'), 10, (frame_width,frame_height))
-    # Read until video is completed
-    while(capture.isOpened()):
-        # Capture frame-by-frame
-        ret, frame = capture.read()
+    sub = red.pubsub()
+    sub.subscribe('start_rtsp_stream_writer')
+    processes = []
+    for message in sub.listen():
+        print(f'in main: message={message}')
+        if message['type'] == 'message':
+            p = Process(target=start_rtsp_stream_writer, args=(red, json.loads(message['data'])))
+            p.start()
+            processes.append(p)
 
-        if ret:
-            out.write(frame)
-        else:
-            break
-        
-            
-    # When everything done, release the video capture object
-    capture.release()
+    for process in processes:
+        process.join()
+
 
 if __name__ =='__main__':
-    parser = ArgumentParser()
-    parser.add_argument('rtsp_link', type=str, help='link to the rtsp stream')
-    parser.add_argument('--file_path', type=str, help='path to write file', default='main.avi')
-    args = parser.parse_args()
-
-	# Create a VideoCapture object
-    capture = cv2.VideoCapture(args.rtsp_link)
-    
-    # Check if camera opened successfully
-    if (capture.isOpened()):
-        main(capture, args.file_path)
+    main()
